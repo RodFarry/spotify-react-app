@@ -12,7 +12,9 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: example
 
   server:
-    build: ./server
+    build:
+      context: ./server
+      dockerfile: Dockerfile
     container_name: node-server
     ports:
       - '5001:5001'
@@ -22,6 +24,9 @@ services:
       SPOTIFY_CALLBACK_URL: ${SPOTIFY_CALLBACK_URL}
       MONGO_URI: ${MONGO_URI}
       PORT: ${PORT}
+      COOKIE_SECRET: ${COOKIE_SECRET} # Ensure this is passed to Docker
+    env_file: # Add this line to specify the .env file
+      - .env # Adjust path according to the relative location of .env
     depends_on:
       - mongodb
 

@@ -1,28 +1,39 @@
 import React, { useState, useEffect } from 'react';
-import SpotifyPlayer from './SpotifyPlayer';
 import axios from 'axios';
+import SpotifyPlayer from './SpotifyPlayer';
 
 const Playlist = () => {
     const [accessToken, setAccessToken] = useState(null);
-    const [playlistId, setPlaylistId] = useState(null); // Replace with actual playlist ID or logic
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
 
     useEffect(() => {
-        // Fetch the Spotify access token from your backend (using your backend's API route)
         axios.get('/api/spotify/token')
-        .then(response => {
-            setAccessToken(response.data.accessToken);
-        })
-        .catch(err => console.error(err));
+            .then(response => {
+                if (response.data.accessToken) {
+                    setAccessToken(response.data.accessToken);
+                    setIsAuthenticated(true);
+                } else {
+                    setIsAuthenticated(false);
+                }
+            })
+            .catch(err => {
+                console.error('Error fetching access token:', err);
+                setIsAuthenticated(false);
+            });
     }, []);
 
     return (
         <div>
-        <h2>Playlist</h2>
-        {accessToken ? (
-            <SpotifyPlayer accessToken={accessToken} playlistId={playlistId} />
-        ) : (
-            <p>Loading player...</p>
-        )}
+            <h2>Playlist</h2>
+            {isAuthenticated ? (
+                accessToken ? (
+                    <SpotifyPlayer accessToken={accessToken} />
+                ) : (
+                    <p>Loading player...</p>
+                )
+            ) : (
+                <p>You need to log in to access the playlist.</p>
+            )}
         </div>
     );
 };

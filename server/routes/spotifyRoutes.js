@@ -3,33 +3,45 @@ const passport = require('passport');
 const SpotifyStrategy = require('passport-spotify').Strategy;
 const router = express.Router();
 
-// Initialize Passport with Spotify Strategy
 passport.use(
     new SpotifyStrategy(
         {
-            clientID: process.env.SPOTIFY_CLIENT_ID,  // Access the client ID from environment variables
-            clientSecret: process.env.SPOTIFY_CLIENT_SECRET,  // Access the client secret from environment variables
-            callbackURL: process.env.SPOTIFY_CALLBACK_URL  // Access the callback URL from environment variables
+            clientID: process.env.SPOTIFY_CLIENT_ID,
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+            callbackURL: process.env.SPOTIFY_CALLBACK_URL,
         },
-        function(accessToken, refreshToken, expires_in, profile, done) {
-            // Save user data to DB or perform other logic
+        (accessToken, refreshToken, expires_in, profile, done) => {
+            console.log('Spotify strategy called');
             done(null, { profile, accessToken });
         }
     )
 );
 
-// Initialize Passport middleware
-router.use(passport.initialize());
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(null, obj));
 
-// Spotify login route
+// Spotify authentication route
 router.get('/login', passport.authenticate('spotify', {
     scope: ['user-read-email', 'user-read-private', 'playlist-modify-public', 'user-library-read', 'user-library-modify']
 }));
 
-// Spotify callback route
-router.get('/callback', passport.authenticate('spotify', { failureRedirect: '/' }), (req, res) => {
-    // Successful authentication, redirect home
-    res.redirect('/');
+// Spotify callback handling
+router.get('/callback', (req, res, next) => {
+    console.log('Callback route accessed with query:', req.query);
+    console.log('Session before authentication:', req.session); // Add this
+    next();
+}, passport.authenticate('spotify', { failureRedirect: '/' }), (req, res) => {
+    if (!req.user) {
+        console.error('User not authenticated in callback');
+        return res.status(500).send('Authentication error');
+    }
+
+    console.log('User authenticated, session data:', req.session); // Log session data after auth
+    console.log('Authenticated user:', req.user); // Log user object
+
+    const accessToken = req.user.accessToken;
+    res.redirect(`http://localhost:3000/callback?accessToken=${accessToken}`);
 });
+
 
 module.exports = router;
