@@ -1,20 +1,23 @@
-require('dotenv').config({ path: '../.env' });
+require('dotenv').config({ path: '../.env' }); // Ensure this loads your .env file
 
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const session = require('express-session');
-const passport = require('passport');
 const spotifyRoutes = require('./routes/spotifyRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-console.log('Initializing middleware...');
+console.log('Starting application...');
 
-// Trust first proxy (if behind a proxy)
-app.set('trust proxy', 1); 
+// Check if JWT_SECRET is loaded properly
+if (!process.env.JWT_SECRET) {
+    console.error('JWT_SECRET is not defined. Please set it in your .env file.');
+    process.exit(1); // Exit the process if the secret is not set
+} else {
+    console.log('JWT_SECRET is set correctly.');
+}
 
 app.use(cors({
     origin: 'http://localhost:3000',
@@ -24,38 +27,6 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-app.use((req, res, next) => {
-    console.log('Before session:', req.session);
-    next();
-});
-
-// Configure express-session
-app.use(session({
-    secret: process.env.COOKIE_SECRET || 'default_secret',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: false,
-        httpOnly: true,
-    },
-}));
-
-app.use((req, res, next) => {
-    console.log('After session:', req.session);
-    next();
-});
-
-// Initialize Passport
-app.use(passport.initialize());
-app.use(passport.session());
-
-app.use((req, res, next) => {
-    console.log('Session data:', req.session);
-    console.log('User:', req.user);
-    next();
-});
-
-// Register Spotify routes under the /api path
 app.use('/api', spotifyRoutes);
 
 app.listen(PORT, () => {

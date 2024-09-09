@@ -1,23 +1,24 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const Callback = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        const searchParams = new URLSearchParams(window.location.search);
-        const accessToken = searchParams.get('accessToken');
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
 
-        if (accessToken) {
-            localStorage.setItem('spotifyAccessToken', accessToken);
-            navigate('/playlists');
+        if (token) {
+            console.log('JWT token received:', token);
+            // Store the token (e.g., in localStorage)
+            localStorage.setItem('spotifyToken', token);
+            navigate('/playlists'); // Redirect to another page
         } else {
-            console.error('Access token not found in callback URL');
-            navigate('/');
+            console.error('No token found in callback URL');
         }
     }, [navigate]);
 
-    return <div>Loading...</div>;
+    return <div>Processing...</div>;
 };
 
 export default Callback;
