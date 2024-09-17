@@ -12,9 +12,9 @@ router.get('/login', (req, res) => {
         'playlist-modify-public',
         'user-library-read',
         'user-library-modify',
-        'streaming',
+        'streaming', // Required for playback
         'user-read-playback-state',
-        'user-modify-playback-state'
+        'user-modify-playback-state' // Required for controlling playback
     ].join(' ');
 
     const authURL = `https://accounts.spotify.com/authorize?${querystring.stringify({
@@ -70,7 +70,7 @@ router.get('/callback', async (req, res) => {
         );
 
         // Redirect to client-side app with the JWT token in the query params
-        res.redirect(`http://localhost:3000/playlists?token=${token}`);
+        res.redirect(`http://localhost:3000/callback?token=${token}`);
     } catch (error) {
         console.error('Error exchanging authorization code:', error.message);
         res.status(500).send('Failed to authenticate with Spotify.');
