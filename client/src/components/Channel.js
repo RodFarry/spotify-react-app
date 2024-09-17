@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode';
 import { getValidSpotifyToken } from '../utils/spotifyToken';
+import { io } from 'socket.io-client';
 
 const Channel = () => {
     const { channelId } = useParams();
@@ -13,45 +13,52 @@ const Channel = () => {
     const [currentSong, setCurrentSong] = useState(null);
     const [deviceId, setDeviceId] = useState(null);
     const [player, setPlayer] = useState(null);
-    
-    // Load Spotify Web Playback SDK and initialize the player
+    const [elapsedTime, setElapsedTime] = useState(0);
+
+    // Establish a WebSocket connection for playback synchronization
+    useEffect(() => {
+        const socket = io('http://localhost:5001');
+
+        // Join the channel room for real-time synchronization
+        socket.emit('join-channel', channelId);
+
+        socket.on('playback-update', (data) => {
+            setCurrentSong(data.song);
+            setElapsedTime(Date.now() - data.timestamp); // Calculate how much of the song has played
+        });
+
+        return () => {
+            socket.disconnect(); // Clean up the WebSocket connection
+        };
+    }, [channelId]);
+
+    // Load the Spotify Web Playback SDK and initialize the player
     useEffect(() => {
         const loadSpotifyPlayer = async () => {
-            try {
-                const accessToken = await getValidSpotifyToken();
+            const accessToken = await getValidSpotifyToken();
 
-                window.onSpotifyWebPlaybackSDKReady = () => {
-                    const spotifyPlayer = new window.Spotify.Player({
-                        name: 'Spotify Web Playback SDK',
-                        getOAuthToken: cb => { cb(accessToken); }
-                    });
+            window.onSpotifyWebPlaybackSDKReady = () => {
+                const spotifyPlayer = new window.Spotify.Player({
+                    name: 'Spotify Web Playback SDK',
+                    getOAuthToken: cb => { cb(accessToken); }
+                });
 
-                    spotifyPlayer.addListener('ready', ({ device_id }) => {
-                        console.log('Ready with Device ID', device_id);
-                        setDeviceId(device_id);
-                    });
+                spotifyPlayer.addListener('ready', ({ device_id }) => {
+                    setDeviceId(device_id);
+                });
 
-                    spotifyPlayer.addListener('not_ready', ({ device_id }) => {
-                        console.log('Device ID has gone offline', device_id);
-                    });
+                spotifyPlayer.connect();
+                setPlayer(spotifyPlayer);
+            };
 
-                    spotifyPlayer.connect();
-                    setPlayer(spotifyPlayer);
-                };
+            const script = document.createElement('script');
+            script.src = 'https://sdk.scdn.co/spotify-player.js';
+            script.async = true;
+            document.body.appendChild(script);
 
-                const script = document.createElement('script');
-                script.src = 'https://sdk.scdn.co/spotify-player.js';
-                script.async = true;
-                document.body.appendChild(script);
-
-                return () => {
-                    if (script) {
-                        document.body.removeChild(script);
-                    }
-                };
-            } catch (error) {
-                console.error('Error loading Spotify player:', error);
-            }
+            return () => {
+                document.body.removeChild(script);
+            };
         };
 
         loadSpotifyPlayer();
@@ -82,8 +89,7 @@ const Channel = () => {
         }
 
         try {
-            const decodedToken = jwtDecode(token);
-            const spotifyAccessToken = decodedToken.accessToken;
+            const spotifyAccessToken = await getValidSpotifyToken();
 
             const response = await axios.get(`https://api.spotify.com/v1/search?q=${query}&type=track`, {
                 headers: {
@@ -103,7 +109,8 @@ const Channel = () => {
                 spotifyId: song.id,
                 title: song.name,
                 artist: song.artists[0].name,
-                albumArt: song.album.images[0].url
+                albumArt: song.album.images[0].url,
+                duration_ms: song.duration_ms,
             }, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('spotifyToken')}` }
             });
@@ -115,13 +122,13 @@ const Channel = () => {
         }
     };
 
-    // Handle voting for a song
+    // Handle voting for a song (upvote/downvote)
     const handleVote = async (songId, vote) => {
         try {
             const response = await axios.post(`http://localhost:5001/api/channels/${channelId}/songs/${songId}/vote`, { vote }, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('spotifyToken')}` }
             });
-            setChannel(response.data);
+            setChannel(response.data); // Update the channel after voting
         } catch (error) {
             console.error('Error voting:', error);
         }
@@ -132,20 +139,21 @@ const Channel = () => {
         if (!queue.includes(song)) {
             setQueue([...queue, song]);
             if (!currentSong) {
-                setCurrentSong(song);
+                setCurrentSong(song); // Play the first song in the queue
                 playSong(song.spotifyId);
             }
         }
     };
 
     // Play a song using Spotify's Web Playback SDK
-    const playSong = async (spotifyId) => {
+    const playSong = async (spotifyId, positionMs = 0) => {
         const token = await getValidSpotifyToken();
         if (!deviceId || !token) return;
-    
+
         try {
             await axios.put(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
-                uris: [`spotify:track:${spotifyId}`]
+                uris: [`spotify:track:${spotifyId}`],
+                position_ms: positionMs,
             }, {
                 headers: {
                     Authorization: `Bearer ${token}`

@@ -6,11 +6,21 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const spotifyRoutes = require('./routes/spotifyRoutes');
 const channelRoutes = require('./routes/channelRoutes');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const httpServer = createServer(app);
+
+// Set up Socket.IO with CORS configuration
+const io = new Server(httpServer, {
+    cors: {
+        origin: 'http://localhost:3000', // Allow requests from your frontend
+        methods: ['GET', 'POST'], // Specify allowed methods
+        credentials: true, // Enable credentials (cookies, authorization headers, etc.)
+    },
+});
 
 // Database connection
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -46,6 +56,6 @@ io.on('connection', (socket) => {
     });
 });
 
-http.listen(PORT, () => {
+httpServer.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });

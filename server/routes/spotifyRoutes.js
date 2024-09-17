@@ -4,10 +4,9 @@ const jwt = require('jsonwebtoken');
 const querystring = require('querystring');
 const router = express.Router();
 
-// Mock DB for refresh tokens (you might want to store it in a real database)
 const refreshTokens = {};
 
-// Route for Spotify login (redirects to Spotify auth)
+// Spotify login route
 router.get('/login', (req, res) => {
     const scope = [
         'user-read-email',
@@ -15,9 +14,9 @@ router.get('/login', (req, res) => {
         'playlist-modify-public',
         'user-library-read',
         'user-library-modify',
-        'streaming', // Required for playback
+        'streaming',
         'user-read-playback-state',
-        'user-modify-playback-state' // Required for controlling playback
+        'user-modify-playback-state',
     ].join(' ');
 
     const authURL = `https://accounts.spotify.com/authorize?${querystring.stringify({
@@ -30,7 +29,7 @@ router.get('/login', (req, res) => {
     res.redirect(authURL);
 });
 
-// Route to handle Spotify callback and issue JWT
+// Spotify callback to exchange code for access and refresh tokens
 router.get('/callback', async (req, res) => {
     const code = req.query.code || null;
 
@@ -39,52 +38,39 @@ router.get('/callback', async (req, res) => {
     }
 
     try {
-        // Exchange authorization code for access and refresh token
-        const tokenResponse = await axios({
-            method: 'post',
-            url: 'https://accounts.spotify.com/api/token',
+        const tokenResponse = await axios.post('https://accounts.spotify.com/api/token', querystring.stringify({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: process.env.SPOTIFY_CALLBACK_URL,
+        }), {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Authorization': 'Basic ' + Buffer.from(`${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`).toString('base64'),
             },
-            data: querystring.stringify({
-                grant_type: 'authorization_code',
-                code,
-                redirect_uri: process.env.SPOTIFY_CALLBACK_URL,
-            }),
         });
-
-        console.log('Access token response:', tokenResponse);
 
         const accessToken = tokenResponse.data.access_token;
         const refreshToken = tokenResponse.data.refresh_token;
-
-        // Store the refresh token in a mock database (you can use a real DB)
         refreshTokens[accessToken] = refreshToken;
 
-        // Fetch user profile from Spotify
         const profileResponse = await axios.get('https://api.spotify.com/v1/me', {
             headers: { Authorization: `Bearer ${accessToken}` },
         });
 
         const userProfile = profileResponse.data;
 
-        // Create JWT with user profile, access token, and refresh token
         const token = jwt.sign(
             { id: userProfile.id, displayName: userProfile.display_name, accessToken, refreshToken },
             process.env.JWT_SECRET,
             { expiresIn: '1h' }
         );
 
-        // Redirect to client-side app with the JWT token in the query params
         res.redirect(`http://localhost:3000/callback?token=${token}`);
     } catch (error) {
-        console.error('Error exchanging authorization code:', error.message);
         res.status(500).send('Failed to authenticate with Spotify.');
     }
 });
 
-// Route to refresh Spotify access token (POST /refresh)
 router.post('/refresh', async (req, res) => {
     const { refreshToken } = req.body;
 
@@ -93,29 +79,21 @@ router.post('/refresh', async (req, res) => {
     }
 
     try {
-        // Exchange refresh token for a new access token
-        const tokenResponse = await axios({
-            method: 'post',
-            url: 'https://accounts.spotify.com/api/token',
+        const tokenResponse = await axios.post('https://accounts.spotify.com/api/token', querystring.stringify({
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+        }), {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Authorization': 'Basic ' + Buffer.from(`${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`).toString('base64'),
             },
-            data: querystring.stringify({
-                grant_type: 'refresh_token',
-                refresh_token: refreshToken,
-            }),
         });
 
         const newAccessToken = tokenResponse.data.access_token;
         const newExpiresIn = tokenResponse.data.expires_in;
 
-        // Update the refresh token in the mock database
-        refreshTokens[newAccessToken] = refreshToken;
-
         res.status(200).json({ newAccessToken, newExpiresIn });
     } catch (error) {
-        console.error('Error refreshing token:', error.message);
         res.status(500).json({ message: 'Failed to refresh token' });
     }
 });
