@@ -3,28 +3,29 @@ import { useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 
 const Callback = () => {
-    console.log('Callback.js rendered'); // To verify component rendering
-
     const navigate = useNavigate();
 
     useEffect(() => {
-        console.log('useEffect triggered'); // Verify useEffect is running
-
         const urlParams = new URLSearchParams(window.location.search);
         const token = urlParams.get('token');
 
         if (token) {
             try {
                 const decoded = jwtDecode(token);
-                console.log('Decoded JWT:', decoded); // Log the decoded token
+                const expiresAt = new Date().getTime() + 3600 * 1000; // Assuming token expires in 1 hour
 
-                // Store the token in localStorage
-                localStorage.setItem('spotifyToken', token);
+                const tokenData = {
+                    accessToken: decoded.accessToken,
+                    refreshToken: decoded.refreshToken, // Ensure refreshToken is also stored if needed
+                    expiresAt,
+                };
+
+                localStorage.setItem('spotifyTokenData', JSON.stringify(tokenData));
                 
-                // Navigate to channels
+                // Navigate to the channels page
                 navigate('/channels');
             } catch (error) {
-                console.error('Error decoding JWT:', error);
+                console.error('Error decoding or storing the token:', error);
             }
         } else {
             console.error('No token found in callback URL');
