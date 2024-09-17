@@ -7,7 +7,7 @@ const startPlayback = (io, channel) => {
         playbackState[channelId] = {
             currentSongIndex: 0,
             isPlaying: false,
-            timestamp: null, // The timestamp when the song started playing
+            timestamp: null,
         };
     }
 

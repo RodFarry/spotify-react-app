@@ -21,7 +21,7 @@ function App() {
                     }
                 } catch (error) {
                     console.error('Error validating Spotify token:', error);
-                    setIsAuthenticated(false); // Set to false if validation fails
+                    setIsAuthenticated(false);
                 }
             }
         };

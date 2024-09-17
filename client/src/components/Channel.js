@@ -24,11 +24,11 @@ const Channel = () => {
 
         socket.on('playback-update', (data) => {
             setCurrentSong(data.song);
-            setElapsedTime(Date.now() - data.timestamp); // Calculate how much of the song has played
+            setElapsedTime(Date.now() - data.timestamp);
         });
 
         return () => {
-            socket.disconnect(); // Clean up the WebSocket connection
+            socket.disconnect();
         };
     }, [channelId]);
 
@@ -99,7 +99,7 @@ const Channel = () => {
     // Add a song to the channel
     const addSongToChannel = async (song) => {
         try {
-            const spotifyAccessToken = await getValidSpotifyToken(); // Ensure valid token for this request
+            const spotifyAccessToken = await getValidSpotifyToken();
             await axios.post(`http://localhost:5001/api/channels/${channelId}/songs`, {
                 spotifyId: song.id,
                 title: song.name,
@@ -107,7 +107,7 @@ const Channel = () => {
                 albumArt: song.album.images[0].url,
                 duration_ms: song.duration_ms,
             }, {
-                headers: { Authorization: `Bearer ${spotifyAccessToken}` } // Use the valid token here
+                headers: { Authorization: `Bearer ${spotifyAccessToken}` }
             });
 
             const updatedChannel = await axios.get(`http://localhost:5001/api/channels/${channelId}`);
@@ -120,11 +120,11 @@ const Channel = () => {
     // Handle voting for a song (upvote/downvote)
     const handleVote = async (songId, vote) => {
         try {
-            const spotifyAccessToken = await getValidSpotifyToken(); // Ensure valid token for this request
+            const spotifyAccessToken = await getValidSpotifyToken();
             const response = await axios.post(`http://localhost:5001/api/channels/${channelId}/songs/${songId}/vote`, { vote }, {
-                headers: { Authorization: `Bearer ${spotifyAccessToken}` } // Use the valid token here
+                headers: { Authorization: `Bearer ${spotifyAccessToken}` }
             });
-            setChannel(response.data); // Update the channel after voting
+            setChannel(response.data);
         } catch (error) {
             console.error('Error voting:', error);
         }
@@ -135,7 +135,7 @@ const Channel = () => {
         if (!queue.includes(song)) {
             setQueue([...queue, song]);
             if (!currentSong) {
-                setCurrentSong(song); // Play the first song in the queue
+                setCurrentSong(song);
                 playSong(song.spotifyId);
             }
         }

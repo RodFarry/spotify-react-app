@@ -16,9 +16,9 @@ const httpServer = createServer(app);
 // Set up Socket.IO with CORS configuration
 const io = new Server(httpServer, {
     cors: {
-        origin: 'http://localhost:3000', // Allow requests from your frontend
-        methods: ['GET', 'POST'], // Specify allowed methods
-        credentials: true, // Enable credentials (cookies, authorization headers, etc.)
+        origin: 'http://localhost:3000',
+        methods: ['GET', 'POST'],
+        credentials: true,
     },
 });
 

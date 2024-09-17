@@ -10,7 +10,7 @@ router.get('/', async (req, res) => {
         const channels = await Channel.find();
         res.status(200).json(channels);
     } catch (error) {
-        console.error('Error fetching channels:', error); // Improved error logging
+        console.error('Error fetching channels:', error);
         res.status(500).json({ message: 'Error fetching channels' });
     }
 });
@@ -26,22 +26,19 @@ router.post('/create', async (req, res) => {
 
     const token = authHeader.split(' ')[1];
 
-    console.log('Received Spotify access token:', token); // Log the received token
+    console.log('Received Spotify access token:', token);
 
     try {
-        // Since this is a Spotify token, we don't need to verify it as a JWT
-        // Instead, just create the channel using the provided name and description
-
         const newChannel = new Channel({
             name,
             description,
-            collaborators: [] // You can still add logic for collaborators if needed
+            collaborators: []
         });
 
         await newChannel.save();
         res.status(201).json(newChannel);
     } catch (error) {
-        console.error('Error creating channel:', error.message); // Log error
+        console.error('Error creating channel:', error.message);
         res.status(500).json({ message: 'Failed to create channel' });
     }
 });
@@ -56,7 +53,7 @@ router.get('/:channelId', async (req, res) => {
         }
         res.status(200).json(channel);
     } catch (error) {
-        console.error('Error fetching channel:', error); // Log error
+        console.error('Error fetching channel:', error);
         res.status(500).json({ message: 'Error fetching channel' });
     }
 });
@@ -68,15 +65,14 @@ router.post('/:channelId/initiatePlayback', async (req, res) => {
         if (!channel) {
             return res.status(404).json({ message: 'Channel not found' });
         }
-        startPlayback(req.io, channel); // Start playback when the first user joins
+        startPlayback(req.io, channel);
         res.status(200).json({ message: 'Playback started' });
     } catch (error) {
-        console.error('Error initiating playback:', error); // Log error
+        console.error('Error initiating playback:', error);
         res.status(500).json({ message: 'Error initiating playback' });
     }
 });
 
-// Add a song to a channel
 // Add a song to a channel
 router.post('/:channelId/songs', async (req, res) => {
     const { spotifyId, title, artist, albumArt, duration_ms } = req.body;
@@ -107,7 +103,7 @@ router.post('/:channelId/songs', async (req, res) => {
         // Return the updated channel
         res.status(201).json(channel);
     } catch (error) {
-        console.error('Failed to add song:', error.message); // Improved error logging
+        console.error('Failed to add song:', error.message);
         res.status(500).json({ message: 'Failed to add song', error: error.message });
     }
 });
