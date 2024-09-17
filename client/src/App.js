@@ -4,16 +4,29 @@ import Channels from './components/Channels';
 import Channel from './components/Channel';
 import Login from './components/Login';
 import { useEffect, useState } from 'react';
+import { getValidSpotifyToken } from './utils/spotifyToken';
 
 function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
 
     useEffect(() => {
-        // Check if a token exists in localStorage
-        const token = localStorage.getItem('spotifyToken');
-        if (token) {
-            setIsAuthenticated(true);
-        }
+        // Check if spotifyTokenData exists in localStorage and if the token is valid
+        const checkAuthentication = async () => {
+            const tokenData = localStorage.getItem('spotifyTokenData');
+            if (tokenData) {
+                try {
+                    const token = await getValidSpotifyToken(); // Validate or refresh the token
+                    if (token) {
+                        setIsAuthenticated(true);
+                    }
+                } catch (error) {
+                    console.error('Error validating Spotify token:', error);
+                    setIsAuthenticated(false); // Set to false if validation fails
+                }
+            }
+        };
+
+        checkAuthentication();
     }, []);
 
     return (

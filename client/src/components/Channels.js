@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { jwtDecode } from 'jwt-decode';
 import axios from 'axios';
 import { Link } from 'react-router-dom'; // Import Link for navigation
+import { getValidSpotifyToken } from '../utils/spotifyToken'; // Import the function
 
 const Channels = () => {
     const [accessToken, setAccessToken] = useState(null);
@@ -9,22 +9,21 @@ const Channels = () => {
     const [newChannelName, setNewChannelName] = useState('');
     const [newChannelDescription, setNewChannelDescription] = useState('');
 
+    // Use getValidSpotifyToken to get the access token
     useEffect(() => {
-        const token = localStorage.getItem('spotifyToken');
-    
-        if (token) {
+        const fetchAccessToken = async () => {
             try {
-                const decodedToken = jwtDecode(token);
-                console.log('Decoded Token:', decodedToken);
-                setAccessToken(decodedToken.accessToken);
+                const token = await getValidSpotifyToken(); // Use getValidSpotifyToken to ensure a valid token
+                setAccessToken(token);
             } catch (error) {
-                console.error('Error decoding token:', error);
+                console.error('Error getting valid Spotify token:', error);
             }
-        } else {
-            console.error('No token found in localStorage');
-        }
+        };
+
+        fetchAccessToken();
     }, []);
 
+    // Fetch channels when the access token is available
     useEffect(() => {
         if (accessToken) {
             axios.get('http://localhost:5001/api/channels', {
@@ -41,38 +40,30 @@ const Channels = () => {
             });
         }
     }, [accessToken]);
-
-    const createChannel = async () => {
-        const token = localStorage.getItem('spotifyToken');
-        
-        if (!token) {
-            console.error('No token found in localStorage');
-            return;
-        }
     
+    const createChannel = async () => {
         try {
+            const token = await getValidSpotifyToken();
+            console.log('Token used for creating channel:', token); // Log the token being used
+            
             const response = await axios.post('http://localhost:5001/api/channels/create', {
                 name: newChannelName,
                 description: newChannelDescription,
             }, {
                 headers: {
-                    Authorization: `Bearer ${token}`,
+                    Authorization: `Bearer ${token}`, // Make sure it's a valid Bearer token
                 }
             });
     
             console.log('Channel created:', response.data);
-    
-            // Add the new channel to the state
             setChannels([...channels, response.data]);
     
-            // Clear the input fields
             setNewChannelName('');
             setNewChannelDescription('');
         } catch (error) {
-            console.error('Error creating channel:', error.message, error.response?.data); // Log error details
+            console.error('Error creating channel:', error.message, error.response?.data);
         }
     };
-    
 
     return (
         <div>

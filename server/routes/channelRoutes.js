@@ -4,6 +4,17 @@ const Channel = require('../models/channel');
 const { startPlayback } = require('../playbackManager');
 const router = express.Router();
 
+// Get all channels
+router.get('/', async (req, res) => {
+    try {
+        const channels = await Channel.find();
+        res.status(200).json(channels);
+    } catch (error) {
+        console.error('Error fetching channels:', error); // Improved error logging
+        res.status(500).json({ message: 'Error fetching channels' });
+    }
+});
+
 // Create a new channel
 router.post('/create', async (req, res) => {
     const { name, description } = req.body;
@@ -15,20 +26,26 @@ router.post('/create', async (req, res) => {
 
     const token = authHeader.split(' ')[1];
 
+    console.log('Received Spotify access token:', token); // Log the received token
+
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        // Since this is a Spotify token, we don't need to verify it as a JWT
+        // Instead, just create the channel using the provided name and description
+
         const newChannel = new Channel({
             name,
             description,
-            collaborators: [decoded.id]
+            collaborators: [] // You can still add logic for collaborators if needed
         });
 
         await newChannel.save();
         res.status(201).json(newChannel);
     } catch (error) {
+        console.error('Error creating channel:', error.message); // Log error
         res.status(500).json({ message: 'Failed to create channel' });
     }
 });
+
 
 // Get a single channel by ID
 router.get('/:channelId', async (req, res) => {
@@ -39,6 +56,7 @@ router.get('/:channelId', async (req, res) => {
         }
         res.status(200).json(channel);
     } catch (error) {
+        console.error('Error fetching channel:', error); // Log error
         res.status(500).json({ message: 'Error fetching channel' });
     }
 });
@@ -53,10 +71,12 @@ router.post('/:channelId/initiatePlayback', async (req, res) => {
         startPlayback(req.io, channel); // Start playback when the first user joins
         res.status(200).json({ message: 'Playback started' });
     } catch (error) {
+        console.error('Error initiating playback:', error); // Log error
         res.status(500).json({ message: 'Error initiating playback' });
     }
 });
 
+// Add a song to a channel
 // Add a song to a channel
 router.post('/:channelId/songs', async (req, res) => {
     const { spotifyId, title, artist, albumArt, duration_ms } = req.body;
@@ -69,22 +89,28 @@ router.post('/:channelId/songs', async (req, res) => {
     const token = authHeader.split(' ')[1];
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        // Find the channel by ID
         const channel = await Channel.findById(req.params.channelId);
         if (!channel) {
             return res.status(404).json({ message: 'Channel not found' });
         }
 
+        // Check if the song already exists in the channel
         if (channel.songs.some(song => song.spotifyId === spotifyId)) {
             return res.status(400).json({ message: 'Song already added' });
         }
 
-        channel.songs.push({ spotifyId, title, artist, albumArt, duration_ms, addedBy: decoded.id });
+        // Add the new song to the channel's songs list
+        channel.songs.push({ spotifyId, title, artist, albumArt, duration_ms });
         await channel.save();
+
+        // Return the updated channel
         res.status(201).json(channel);
     } catch (error) {
-        res.status(500).json({ message: 'Failed to add song' });
+        console.error('Failed to add song:', error.message); // Improved error logging
+        res.status(500).json({ message: 'Failed to add song', error: error.message });
     }
 });
+
 
 module.exports = router;

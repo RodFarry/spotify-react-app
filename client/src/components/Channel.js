@@ -81,15 +81,9 @@ const Channel = () => {
     // Search for songs on Spotify
     const handleSearch = async (e) => {
         e.preventDefault();
-        
-        const token = localStorage.getItem('spotifyToken');
-        if (!token) {
-            console.error('No token found in localStorage');
-            return;
-        }
 
         try {
-            const spotifyAccessToken = await getValidSpotifyToken();
+            const spotifyAccessToken = await getValidSpotifyToken(); // Get a valid Spotify token using the helper
 
             const response = await axios.get(`https://api.spotify.com/v1/search?q=${query}&type=track`, {
                 headers: {
@@ -105,6 +99,7 @@ const Channel = () => {
     // Add a song to the channel
     const addSongToChannel = async (song) => {
         try {
+            const spotifyAccessToken = await getValidSpotifyToken(); // Ensure valid token for this request
             await axios.post(`http://localhost:5001/api/channels/${channelId}/songs`, {
                 spotifyId: song.id,
                 title: song.name,
@@ -112,11 +107,11 @@ const Channel = () => {
                 albumArt: song.album.images[0].url,
                 duration_ms: song.duration_ms,
             }, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('spotifyToken')}` }
+                headers: { Authorization: `Bearer ${spotifyAccessToken}` } // Use the valid token here
             });
 
             const updatedChannel = await axios.get(`http://localhost:5001/api/channels/${channelId}`);
-            setChannel(updatedChannel.data); 
+            setChannel(updatedChannel.data);
         } catch (error) {
             console.error('Error adding song to channel:', error);
         }
@@ -125,8 +120,9 @@ const Channel = () => {
     // Handle voting for a song (upvote/downvote)
     const handleVote = async (songId, vote) => {
         try {
+            const spotifyAccessToken = await getValidSpotifyToken(); // Ensure valid token for this request
             const response = await axios.post(`http://localhost:5001/api/channels/${channelId}/songs/${songId}/vote`, { vote }, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('spotifyToken')}` }
+                headers: { Authorization: `Bearer ${spotifyAccessToken}` } // Use the valid token here
             });
             setChannel(response.data); // Update the channel after voting
         } catch (error) {
