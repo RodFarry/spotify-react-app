@@ -14,21 +14,23 @@ const Channel = () => {
     const [deviceId, setDeviceId] = useState(null);
     const [player, setPlayer] = useState(null);
     const [elapsedTime, setElapsedTime] = useState(0);
+    const [socket, setSocket] = useState(null);
 
     // Establish a WebSocket connection for playback synchronization
     useEffect(() => {
-        const socket = io('http://localhost:5001');
+        const newSocket = io('http://localhost:5001');
+        setSocket(newSocket);
 
         // Join the channel room for real-time synchronization
-        socket.emit('join-channel', channelId);
+        newSocket.emit('join-channel', channelId);
 
-        socket.on('playback-update', (data) => {
+        newSocket.on('playback-update', (data) => {
             setCurrentSong(data.song);
-            setElapsedTime(Date.now() - data.timestamp);
+            setElapsedTime(Date.now() - data.startTime); // Calculate how much of the song has played
         });
 
         return () => {
-            socket.disconnect();
+            newSocket.disconnect();
         };
     }, [channelId]);
 
@@ -44,7 +46,16 @@ const Channel = () => {
                 });
 
                 spotifyPlayer.addListener('ready', ({ device_id }) => {
+                    console.log('Spotify Player is ready with device ID:', device_id);
                     setDeviceId(device_id);
+                });
+
+                spotifyPlayer.addListener('player_state_changed', (state) => {
+                    if (!state) return;
+
+                    if (state.paused && state.position === 0 && state.duration === state.position) {
+                        handleNextSong();
+                    }
                 });
 
                 spotifyPlayer.connect();
@@ -78,12 +89,63 @@ const Channel = () => {
         fetchChannel();
     }, [channelId]);
 
+    // Sync playback for users joining mid-song
+    const syncPlayback = async (song, positionMs) => {
+        const token = await getValidSpotifyToken();
+
+        if (!deviceId || !token) {
+            console.error('Device ID or Token missing:', deviceId, token);
+            return;
+        }
+
+        try {
+            await axios.put(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+                uris: [`spotify:track:${song.spotifyId}`],
+                position_ms: positionMs,
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+        } catch (error) {
+            console.error('Error syncing playback:', error);
+        }
+    };
+
+    // Handle playing the next song in the channel
+    const handleNextSong = () => {
+        if (!channel || channel.songs.length === 0) return;
+
+        const nextIndex = (channel.songs.findIndex(s => s._id === currentSong._id) + 1) % channel.songs.length;
+        const nextSong = channel.songs[nextIndex];
+        console.log('Playing next song:', nextSong.title);
+        setCurrentSong(nextSong);
+
+        // Broadcast the next song to all clients via WebSocket
+        socket.emit('playback-update', { song: nextSong, startTime: Date.now() });
+
+        syncPlayback(nextSong, 0); // Start next song from the beginning
+    };
+
+    // Start playback on page load or reload
+    useEffect(() => {
+        if (channel && channel.songs.length > 0 && !currentSong && deviceId) {
+            const firstSong = channel.songs[0];
+            console.log('Starting playback for the first song.');
+            setCurrentSong(firstSong);
+
+            // Sync the first song across all users
+            socket.emit('playback-update', { song: firstSong, startTime: Date.now() });
+            syncPlayback(firstSong, 0); // Start from the beginning
+        }
+    }, [channel, currentSong, deviceId]);
+
     // Search for songs on Spotify
     const handleSearch = async (e) => {
         e.preventDefault();
 
         try {
-            const spotifyAccessToken = await getValidSpotifyToken(); // Get a valid Spotify token using the helper
+            const spotifyAccessToken = await getValidSpotifyToken();
 
             const response = await axios.get(`https://api.spotify.com/v1/search?q=${query}&type=track`, {
                 headers: {
@@ -117,6 +179,17 @@ const Channel = () => {
         }
     };
 
+    // Add a song to the queue
+    const addToQueue = (song) => {
+        if (!queue.includes(song)) {
+            setQueue([...queue, song]);
+            if (!currentSong) {
+                setCurrentSong(song);
+                syncPlayback(song, Date.now());
+            }
+        }
+    };
+
     // Handle voting for a song (upvote/downvote)
     const handleVote = async (songId, vote) => {
         try {
@@ -124,49 +197,20 @@ const Channel = () => {
             const response = await axios.post(`http://localhost:5001/api/channels/${channelId}/songs/${songId}/vote`, { vote }, {
                 headers: { Authorization: `Bearer ${spotifyAccessToken}` }
             });
-            setChannel(response.data);
+            setChannel(response.data); // Update channel after voting
         } catch (error) {
             console.error('Error voting:', error);
         }
     };
 
-    // Add a song to the queue
-    const addToQueue = (song) => {
-        if (!queue.includes(song)) {
-            setQueue([...queue, song]);
-            if (!currentSong) {
-                setCurrentSong(song);
-                playSong(song.spotifyId);
-            }
-        }
-    };
-
-    // Play a song using Spotify's Web Playback SDK
-    const playSong = async (spotifyId, positionMs = 0) => {
-        const token = await getValidSpotifyToken();
-        if (!deviceId || !token) return;
-
-        try {
-            await axios.put(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
-                uris: [`spotify:track:${spotifyId}`],
-                position_ms: positionMs,
-            }, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-        } catch (error) {
-            console.error('Error playing song:', error);
-        }
-    };
-
+    // Render song queue
     const renderSongQueue = () => {
-        if (queue.length === 0) return <p>No songs in queue.</p>;
+        if (!channel || channel.songs.length === 0) return <p>No songs in the channel.</p>;
         return (
             <div>
-                <h4>Current Queue</h4>
+                <h4>All Songs in Channel</h4>
                 <ul>
-                    {queue.map((song, index) => (
+                    {channel.songs.map((song, index) => (
                         <li key={index}>{song.title} by {song.artist}</li>
                     ))}
                 </ul>
@@ -229,8 +273,10 @@ const Channel = () => {
                         return (
                             <li key={song.id} style={{ color: alreadyAdded ? 'grey' : 'black' }}>
                                 {song.name} by {song.artists[0].name}
-                                {!alreadyAdded && (
+                                {!alreadyAdded ? (
                                     <button onClick={() => addSongToChannel(song)}>Add to Channel</button>
+                                ) : (
+                                    <button onClick={() => addToQueue(song)}>Queue</button>
                                 )}
                             </li>
                         );

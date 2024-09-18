@@ -8,6 +8,7 @@ const spotifyRoutes = require('./routes/spotifyRoutes');
 const channelRoutes = require('./routes/channelRoutes');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
+const { getPlaybackState } = require('./playbackManager');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -45,6 +46,18 @@ io.on('connection', (socket) => {
     socket.on('join-channel', (channelId) => {
         socket.join(channelId);
         console.log(`User joined channel ${channelId}`);
+
+        // Sync the current playback state for the new user
+        const playbackState = getPlaybackState(channelId);
+        if (playbackState) {
+            const currentSong = playbackState.currentSongIndex;
+            const elapsedTime = Date.now() - playbackState.timestamp;
+
+            socket.emit('sync-playback', {
+                song: currentSong,
+                elapsedTime,
+            });
+        }
     });
 
     socket.on('playback-update', (data) => {

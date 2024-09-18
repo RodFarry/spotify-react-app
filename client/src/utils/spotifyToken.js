@@ -11,7 +11,7 @@ export const getValidSpotifyToken = async () => {
     const currentTime = new Date().getTime();
 
     if (currentTime < expiresAt) {
-        console.log('Returning access token:', accessToken);
+        // console.log('Returning access token:', accessToken);
         return accessToken;
     }
 

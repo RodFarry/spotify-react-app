@@ -1,5 +1,4 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const Channel = require('../models/channel');
 const { startPlayback } = require('../playbackManager');
 const router = express.Router();
@@ -15,35 +14,6 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Create a new channel
-router.post('/create', async (req, res) => {
-    const { name, description } = req.body;
-    const authHeader = req.headers['authorization'];
-
-    if (!authHeader) {
-        return res.status(403).json({ message: 'No token provided' });
-    }
-
-    const token = authHeader.split(' ')[1];
-
-    console.log('Received Spotify access token:', token);
-
-    try {
-        const newChannel = new Channel({
-            name,
-            description,
-            collaborators: []
-        });
-
-        await newChannel.save();
-        res.status(201).json(newChannel);
-    } catch (error) {
-        console.error('Error creating channel:', error.message);
-        res.status(500).json({ message: 'Failed to create channel' });
-    }
-});
-
-
 // Get a single channel by ID
 router.get('/:channelId', async (req, res) => {
     try {
@@ -58,49 +28,42 @@ router.get('/:channelId', async (req, res) => {
     }
 });
 
-// Start playback
-router.post('/:channelId/initiatePlayback', async (req, res) => {
+// Create a new channel
+router.post('/create', async (req, res) => {
+    const { name, description } = req.body;
+
     try {
-        const channel = await Channel.findById(req.params.channelId);
-        if (!channel) {
-            return res.status(404).json({ message: 'Channel not found' });
-        }
-        startPlayback(req.io, channel);
-        res.status(200).json({ message: 'Playback started' });
+        const newChannel = new Channel({
+            name,
+            description,
+            collaborators: [],
+        });
+
+        await newChannel.save();
+        res.status(201).json(newChannel);
     } catch (error) {
-        console.error('Error initiating playback:', error);
-        res.status(500).json({ message: 'Error initiating playback' });
+        console.error('Error creating channel:', error.message);
+        res.status(500).json({ message: 'Failed to create channel' });
     }
 });
 
 // Add a song to a channel
 router.post('/:channelId/songs', async (req, res) => {
     const { spotifyId, title, artist, albumArt, duration_ms } = req.body;
-    const authHeader = req.headers['authorization'];
-
-    if (!authHeader) {
-        return res.status(403).json({ message: 'No token provided' });
-    }
-
-    const token = authHeader.split(' ')[1];
 
     try {
-        // Find the channel by ID
         const channel = await Channel.findById(req.params.channelId);
         if (!channel) {
             return res.status(404).json({ message: 'Channel not found' });
         }
 
-        // Check if the song already exists in the channel
         if (channel.songs.some(song => song.spotifyId === spotifyId)) {
             return res.status(400).json({ message: 'Song already added' });
         }
 
-        // Add the new song to the channel's songs list
         channel.songs.push({ spotifyId, title, artist, albumArt, duration_ms });
         await channel.save();
 
-        // Return the updated channel
         res.status(201).json(channel);
     } catch (error) {
         console.error('Failed to add song:', error.message);
@@ -108,5 +71,54 @@ router.post('/:channelId/songs', async (req, res) => {
     }
 });
 
+// Start playback for a channel
+router.post('/:channelId/initiatePlayback', async (req, res) => {
+    try {
+        const channel = await Channel.findById(req.params.channelId);
+        if (!channel) {
+            return res.status(404).json({ message: 'Channel not found' });
+        }
+        startPlayback(req.io, channel); // Initiate playback for the channel
+        res.status(200).json({ message: 'Playback started' });
+    } catch (error) {
+        console.error('Error initiating playback:', error);
+        res.status(500).json({ message: 'Error initiating playback' });
+    }
+});
+
+// Upvote/Downvote a song
+router.post('/:channelId/songs/:songId/vote', async (req, res) => {
+    const { vote } = req.body; // 'up' or 'down'
+    const { channelId, songId } = req.params;
+
+    try {
+        const channel = await Channel.findById(channelId);
+        if (!channel) {
+            return res.status(404).json({ message: 'Channel not found' });
+        }
+
+        const song = channel.songs.id(songId);
+        if (!song) {
+            return res.status(404).json({ message: 'Song not found' });
+        }
+
+        if (vote === 'up') {
+            song.votes = (song.votes || 0) + 1;
+        } else if (vote === 'down') {
+            song.votes = (song.votes || 0) - 1;
+
+            // Remove song if downvotes exceed threshold
+            if (song.votes <= -5) {
+                song.remove();
+            }
+        }
+
+        await channel.save();
+        res.status(200).json(channel);
+    } catch (error) {
+        console.error('Failed to vote on song:', error.message);
+        res.status(500).json({ message: 'Failed to vote on song', error: error.message });
+    }
+});
 
 module.exports = router;
