@@ -75,21 +75,45 @@ const Channel = () => {
         loadSpotifyPlayer();
     }, []);
 
-    // Fetch channel details by ID
+    // Fetch channel details and playback state by ID
     useEffect(() => {
-        const fetchChannel = async () => {
+        const fetchChannelAndPlaybackState = async () => {
             try {
-                const response = await axios.get(`http://localhost:5001/api/channels/${channelId}`);
-                setChannel(response.data);
+                // Fetch channel details
+                const channelResponse = await axios.get(`http://localhost:5001/api/channels/${channelId}`);
+                setChannel(channelResponse.data);
+    
+                // Fetch playback state (current song and start time)
+                const playbackStateResponse = await axios.get(`http://localhost:5001/api/channels/${channelId}/playbackState`);
+                const { song, startTime } = playbackStateResponse.data;
+    
+                setCurrentSong(song);
+                const elapsedTime = Date.now() - startTime;
+                setElapsedTime(elapsedTime);
+    
+                // Sync playback using elapsed time
+                syncPlayback(song, elapsedTime);
             } catch (error) {
-                console.error('Error fetching channel details:', error);
+                // If playback state does not exist (404), try initiating playback
+                if (error.response && error.response.status === 404) {
+                    console.log('No active playback, attempting to start playback...');
+                    try {
+                        await axios.post(`http://localhost:5001/api/channels/${channelId}/initiatePlayback`);
+                        fetchChannelAndPlaybackState(); // Retry after initiating playback
+                    } catch (playbackError) {
+                        console.error('Error initiating playback:', playbackError);
+                    }
+                } else {
+                    console.error('Error fetching channel or playback state:', error);
+                }
             }
         };
-
-        fetchChannel();
+    
+        fetchChannelAndPlaybackState();
     }, [channelId]);
+    
 
-    // Sync playback for users joining mid-song
+    // Sync playback to the correct position
     const syncPlayback = async (song, positionMs) => {
         const token = await getValidSpotifyToken();
 
@@ -99,9 +123,10 @@ const Channel = () => {
         }
 
         try {
+            // Start playback from the correct position (elapsed time)
             await axios.put(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
                 uris: [`spotify:track:${song.spotifyId}`],
-                position_ms: positionMs,
+                position_ms: positionMs,  // Start from the elapsed time
             }, {
                 headers: {
                     Authorization: `Bearer ${token}`
@@ -129,16 +154,11 @@ const Channel = () => {
 
     // Start playback on page load or reload
     useEffect(() => {
-        if (channel && channel.songs.length > 0 && !currentSong && deviceId) {
-            const firstSong = channel.songs[0];
-            console.log('Starting playback for the first song.');
-            setCurrentSong(firstSong);
-
-            // Sync the first song across all users
-            socket.emit('playback-update', { song: firstSong, startTime: Date.now() });
-            syncPlayback(firstSong, 0); // Start from the beginning
+        if (currentSong && deviceId) {
+            const positionMs = elapsedTime > 0 ? elapsedTime : 0;
+            syncPlayback(currentSong, positionMs); // Sync to the correct position
         }
-    }, [channel, currentSong, deviceId]);
+    }, [currentSong, deviceId, elapsedTime]);
 
     // Search for songs on Spotify
     const handleSearch = async (e) => {

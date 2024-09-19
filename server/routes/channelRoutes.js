@@ -1,6 +1,6 @@
 const express = require('express');
 const Channel = require('../models/channel');
-const { startPlayback } = require('../playbackManager');
+const { getPlaybackState, startPlayback } = require('../playbackManager');
 const router = express.Router();
 
 // Get all channels
@@ -11,6 +11,32 @@ router.get('/', async (req, res) => {
     } catch (error) {
         console.error('Error fetching channels:', error);
         res.status(500).json({ message: 'Error fetching channels' });
+    }
+});
+
+// Create a new channel
+router.post('/create', async (req, res) => {
+    const { name, description } = req.body;
+    const authHeader = req.headers['authorization'];
+
+    if (!authHeader) {
+        return res.status(403).json({ message: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    try {
+        const newChannel = new Channel({
+            name,
+            description,
+            collaborators: []
+        });
+
+        await newChannel.save();
+        res.status(201).json(newChannel);
+    } catch (error) {
+        console.error('Error creating channel:', error.message);
+        res.status(500).json({ message: 'Failed to create channel' });
     }
 });
 
@@ -25,25 +51,6 @@ router.get('/:channelId', async (req, res) => {
     } catch (error) {
         console.error('Error fetching channel:', error);
         res.status(500).json({ message: 'Error fetching channel' });
-    }
-});
-
-// Create a new channel
-router.post('/create', async (req, res) => {
-    const { name, description } = req.body;
-
-    try {
-        const newChannel = new Channel({
-            name,
-            description,
-            collaborators: [],
-        });
-
-        await newChannel.save();
-        res.status(201).json(newChannel);
-    } catch (error) {
-        console.error('Error creating channel:', error.message);
-        res.status(500).json({ message: 'Failed to create channel' });
     }
 });
 
@@ -70,6 +77,37 @@ router.post('/:channelId/songs', async (req, res) => {
         res.status(500).json({ message: 'Failed to add song', error: error.message });
     }
 });
+
+// Get playback state (current song and start time) for a channel
+router.get('/:channelId/playbackState', async (req, res) => {
+    const channelId = req.params.channelId;
+    
+    // Fetch playback state
+    const playback = getPlaybackState(channelId); // Fetch from playback manager
+
+    if (!playback || !playback.isPlaying) {
+        console.error(`No playback found for channel: ${channelId}`);
+        return res.status(404).json({ message: 'No playback active for this channel.' });
+    }
+
+    try {
+        const channel = await Channel.findById(channelId);
+        if (!channel) {
+            return res.status(404).json({ message: 'Channel not found' });
+        }
+
+        const currentSong = channel.songs[playback.currentSongIndex];
+
+        return res.status(200).json({
+            song: currentSong,
+            startTime: playback.startTime,
+        });
+    } catch (error) {
+        console.error(`Error fetching playback state for channel ${channelId}:`, error);
+        return res.status(500).json({ message: 'Error fetching playback state' });
+    }
+});
+
 
 // Start playback for a channel
 router.post('/:channelId/initiatePlayback', async (req, res) => {

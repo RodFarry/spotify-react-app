@@ -1,5 +1,6 @@
 let playbackState = {};
 
+// Function to start playing the next song in the channel's playlist
 const startPlayback = (io, channel) => {
     const channelId = channel._id.toString();
 
@@ -7,33 +8,33 @@ const startPlayback = (io, channel) => {
         playbackState[channelId] = {
             currentSongIndex: 0,
             isPlaying: false,
-            timestamp: null,
+            startTime: null,
         };
     }
 
     if (!playbackState[channelId].isPlaying) {
         const currentSong = channel.songs[playbackState[channelId].currentSongIndex];
         playbackState[channelId].isPlaying = true;
-        playbackState[channelId].timestamp = Date.now();
+        playbackState[channelId].startTime = Date.now();
 
-        // Notify all clients about the current song and the elapsed time
+        // Broadcast playback state to all clients in the channel
         io.to(channelId).emit('playback-update', {
             song: currentSong,
-            timestamp: playbackState[channelId].timestamp,
+            startTime: playbackState[channelId].startTime,
         });
 
-        // When the song finishes, play the next one
+        // When the song finishes, move to the next one
         setTimeout(() => {
             playbackState[channelId].currentSongIndex = (playbackState[channelId].currentSongIndex + 1) % channel.songs.length;
             playbackState[channelId].isPlaying = false;
-            startPlayback(io, channel); // Loop to the next song
-        }, currentSong.duration_ms); // Use the actual song duration
+            startPlayback(io, channel);
+        }, currentSong.duration_ms);
     }
 };
 
-// Function to get the current playback state (for syncing)
+// Function to get the current playback state for a channel
 const getPlaybackState = (channelId) => {
-    return playbackState[channelId] || null;
+    return playbackState[channelId];
 };
 
-module.exports = { playbackState, startPlayback, getPlaybackState };
+module.exports = { startPlayback, getPlaybackState };
